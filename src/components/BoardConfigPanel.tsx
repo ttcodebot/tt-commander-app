@@ -16,20 +16,15 @@ import {
   Stack,
   TextField,
 } from '@suid/material';
-import { For, Show } from 'solid-js';
+import { createSignal, For, Show } from 'solid-js';
+import { DefaultProjectConfig } from '~/model/configIni';
 import { deviceState, selectedDesignAddress, updateDeviceState } from '~/model/DeviceState';
 import { isFactoryMode } from '~/model/factory';
 import { compareVersions, subtileFirmwareVersion } from '~/model/firmware';
-import {
-  DesignAddress,
-  findProject,
-  formatDesignAddress,
-  Project,
-  projectAddress,
-  shuttle,
-} from '~/model/shuttle';
+import { DesignAddress, findProject, Project, projectAddress, shuttle } from '~/model/shuttle';
 import { frequencyTable, TTBoardDevice } from '~/ttcontrol/TTBoardDevice';
 import { GitHubIcon } from './GitHubIcon';
+import { MakeDefaultDialog } from './MakeDefaultDialog';
 import { ProjectSelect } from './ProjectSelect';
 
 export interface IBoardConfigPanelProps {
@@ -80,11 +75,31 @@ export function BoardConfigPanel(props: IBoardConfigPanelProps) {
     setSelectedAddress({ address, subtile });
   };
 
-  const writeConfigIni = () => {
-    void props.device.writeConfig(
-      selectedProject()?.macro ?? formatDesignAddress(selectedDesignAddress()),
-      deviceState.clockHz,
-    );
+  // The project and settings captured when the "Make default" dialog was opened.
+  const [makeDefault, setMakeDefault] = createSignal<{
+    project: Project;
+    config: DefaultProjectConfig;
+  } | null>(null);
+
+  const openMakeDefault = () => {
+    const project = selectedProject();
+    if (!project) {
+      return;
+    }
+    let uiIn = 0;
+    for (const bit of deviceState.uiIn) {
+      uiIn |= 1 << parseInt(bit, 10);
+    }
+    setMakeDefault({
+      project,
+      config: {
+        macro: project.macro,
+        clockHz: deviceState.clockHz,
+        // The firmware only drives ui_in when the mode isn't ASIC_MANUAL_INPUTS.
+        mode: deviceState.uiInEnabled ? 'ASIC_RP_CONTROL' : 'ASIC_MANUAL_INPUTS',
+        uiIn: deviceState.uiInEnabled ? uiIn : undefined,
+      },
+    });
   };
 
   const projectLinks = () => {
@@ -215,10 +230,29 @@ export function BoardConfigPanel(props: IBoardConfigPanelProps) {
       </Stack>
 
       <Stack my={1} direction="row" spacing={1}>
-        <Show when={false}>
-          <Button onClick={writeConfigIni} variant="contained" startIcon={<Save />}>
-            Persist config to board
-          </Button>
+        <Button
+          onClick={openMakeDefault}
+          variant="contained"
+          startIcon={<Save />}
+          disabled={!selectedProject()}
+          title={
+            selectedProject()
+              ? 'Load the selected project automatically when the board powers up'
+              : 'Select a project from the shuttle to make it the default'
+          }
+        >
+          Make default
+        </Button>
+        <Show when={makeDefault()}>
+          {(makeDefault) => (
+            <MakeDefaultDialog
+              device={props.device}
+              project={makeDefault().project}
+              config={makeDefault().config}
+              open
+              onClose={() => setMakeDefault(null)}
+            />
+          )}
         </Show>
 
         <Show when={isFactoryMode()}>

@@ -159,6 +159,39 @@ def read_rom():
         report({"shuttle": shuttle, "repo": "SHUTTLE OVERRIDE"})
 
 
+CONFIG_INI = "config.ini"
+
+
+def read_config():
+    import binascii
+
+    try:
+        with open(CONFIG_INI, "rb") as f:
+            data = f.read()
+    except OSError as e:
+        report("tt.config_ini_error", str(e))
+        return
+    report("tt.config_ini", binascii.b2a_base64(data).decode().strip() or "-")
+
+
+def write_config(data_b64):
+    import binascii
+
+    data = binascii.a2b_base64(data_b64)
+    try:
+        with open(CONFIG_INI, "wb") as f:
+            f.write(data)
+        with open(CONFIG_INI, "rb") as f:
+            readback = f.read()
+    except OSError as e:
+        report("tt.config_ini_error", str(e))
+        return
+    if readback != data:
+        report("tt.config_ini_error", "verification failed")
+        return
+    report("tt.config_ini_written", len(data))
+
+
 def run_factory_test():
     import ttboard.util.shuttle_tests as st
 
